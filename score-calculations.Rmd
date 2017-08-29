@@ -1,0 +1,150 @@
+---
+title: "BAP Candidate Score Calculations"
+author: "Eric He"
+date: "August 26, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("googlesheets") # manipulate google sheets
+library("dplyr") # munge data
+library("jsonlite") # write to JSON
+library("purrr") # functionals
+library("stringr") # text processing
+library("magrittr") # pipes
+library("readxl")
+library("reshape2")
+```
+
+We impose strict file naming conventions so that everything can be parsed correctly and without any weird bugs.
+
+```{r}
+orgsync_file <- "type-speaker_pnt-2_pen-0_sem-spring-2017_name-BAP-E-Board-Elections-Participation.xlsx"
+event_info <- read.csv("event_info.csv", stringsAsFactors = FALSE)
+
+gs_auth()
+```
+
+```{r}
+sheets_url <- "https://docs.google.com/spreadsheets/d/1PzNG2zPv1m9wQ081_0A9Y89MlQrd_yzRdaeC7ZPlwCc/edit#gid=0"
+key <- sheets_url %>%
+  extract_key_from_url %>%
+  gs_key
+
+member_event_tech_mat <- gs_read_csv("event_member", ss = key)
+event_info <- gs_read_csv("event_info", ss = key)
+
+member_event_cm_mat <- "set up the google sheets here"
+#member_event_tech_mat <- "set up"
+
+if (nrow(member_event_cm_mat) != nrow(member_event_tech_mat) | ncol(member_event_cm_mat) != ncol(member_event_tech_mat)){ 
+  stop("CM and Tech Committee data have differing member and/or event counts")}
+```
+
+```{r}
+member_event_tech_mat
+```
+
+```{r}
+event_info
+```
+
+Take a look at the structure of the OrgSync file.
+
+```{r}
+excel_sheets(orgsync_file)
+```
+
+Read in the sheet.
+
+```{r}
+raw_output <- read_excel(orgsync_file, sheet = "Participation")
+
+# alternatively use sheet = 1 since it is the first sheet.
+```
+
+Parse the file name to get the event information. I've designed the parsing process to break unless the file naming convention is exactly followed (more or less). This is because if the file is named incorrectly, it is very difficult to figure out how to programmatically fix the mistake.
+
+IMPORTANT: event_name assumes there is a file extension such as .xlsx or .csv! Not true for Google Sheets!
+
+Event_points and event_penalty only accept numbers, and will accept a maximum of 2 numbers before expecting the _ symbol.
+
+```{r}
+event_name <- str_extract(orgsync_file, pattern = "(?<=name-).*?(?=\\.)") %>% str_to_lower()
+event_type <- str_extract(orgsync_file, pattern = "(?m)(?<=type-)(speaker)|(community)|(social)(?=_)") %>% str_to_lower()
+event_points <- str_extract(orgsync_file, pattern = "(?<=pnt-)[\\d]{1,2}(?=_)") %>% as.numeric
+event_penalty <- str_extract(orgsync_file, pattern = "(?<=pen-)[\\d]{1,2}(?=_)") %>% as.numeric
+event_semester <- str_extract(orgsync_file, pattern = "(?<=sem-)((spring)|(fall))-[\\d]+(?=_)") %>% str_to_lower
+
+new_event <- data_frame(event_name, event_type, event_points, event_penalty, event_semester)
+(event_info %<>% rbind(new_event))
+
+# write.csv(event_info, "event_info.csv", row.names = FALSE) # Update this code to just edit the Google Sheets
+```
+
+Parse the OrgSync output.
+
+We make a new data frame of event attendees and do a full join with the existing member-event table.
+
+```{r}
+netID_vec <- str_extract(raw_output$Email, pattern = ".*?(?=@)")
+event_attendees <- data_frame(NetID = netID_vec, event_name = TRUE) %>% # data frame does not look in global env for event_name variable
+  set_colnames(c(colnames(.)[-ncol(.)], event_name)) # this looks soooo ugly
+new_member_event_tech_mat <- full_join(member_event_tech_mat, event_attendees, by = "NetID") %>%
+  mutate_all(~replace(., which(is.na(.)), FALSE))
+new_member_event_tech_mat
+```
+
+Calculate total point scores.
+We melt the member-event table, perform a left join on the melted table with the event info table, and then use this big data frame to calculate points breakdowns.
+
+```{r}
+(melted <- melt(new_member_event_tech_mat, id = "NetID", variable.name = "event_name", value.name = "attended"))
+```
+
+```{r}
+(full <- left_join(melted, event_info, by = "event_name"))
+```
+
+```{r}
+full %>%
+  group_by(NetID, event_type) %>%
+  summarise(total_points = sum(event_points * attended - event_penalty * !attended))
+```
+
+Demo code
+
+Next steps: Convert event-member table and member point totals to JSON (a bit difficult because we have nested layers; i have to look into another R package)
+Look into dynamically updating the Google Sheets
+
+
+```{r}
+member_event_tech_mat <- gs_read_csv("event_member", ss = key)
+event_info <- gs_read_csv("event_info", ss = key)
+
+event_name <- str_extract(orgsync_file, pattern = "(?<=name-).*?(?=\\.)") %>% str_to_lower()
+event_type <- str_extract(orgsync_file, pattern = "(?<=type-)(speaker)|(community)|(social)(?=_)") %>% str_to_lower()
+event_points <- str_extract(orgsync_file, pattern = "(?<=pnt-)[\\d]{1,2}(?=_)") %>% as.numeric
+event_penalty <- str_extract(orgsync_file, pattern = "(?<=pen-)[\\d]{1,2}(?=_)") %>% as.numeric
+event_semester <- str_extract(orgsync_file, pattern = "(?<=sem-)((spring)|(fall))-[\\d]+(?=_)") %>% str_to_lower
+
+new_event <- data_frame(event_name, event_type, event_points, event_penalty, event_semester)
+event_info %<>% rbind(new_event)
+netID_vec <- str_extract(raw_output$Email, pattern = ".*?(?=@)")
+event_attendees <- data_frame(NetID = netID_vec, event_name = TRUE) %>% # data frame does not look in global env for event_name variable
+  set_colnames(c(colnames(.)[-ncol(.)], event_name)) # this looks soooo ugly
+new_member_event_tech_mat <- full_join(member_event_tech_mat, event_attendees, by = "NetID") %>%
+  mutate_all(~replace(., which(is.na(.)), FALSE))
+
+melted <- melt(new_member_event_tech_mat, id = "NetID", variable.name = "event_name", value.name = "attended")
+full <- left_join(melted, event_info, by = "event_name")
+
+full %>%
+  group_by(NetID, event_type) %>%
+  summarise(total_points = sum(event_points * attended - event_penalty * !attended)) %>%
+  View()
+```

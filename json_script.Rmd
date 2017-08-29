@@ -1,0 +1,136 @@
+---
+title: "Google Sheets JSON"
+author: "Eric He"
+date: "August 21, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("googlesheets") # manipulate google sheets
+library("dplyr") # munge data
+library("jsonlite") # write to JSON
+library("purrr") # functionals
+library("stringr") # text processing
+```
+
+Give R permission to control your Google Sheet. This only needs to be done once per account.
+
+```{r}
+gs_auth()
+```
+
+Extract the key we can use to control the Google Sheet from within R.
+
+```{r}
+key <- extract_key_from_url("https://docs.google.com/spreadsheets/d/1xvODUunKQ1RUQykaoE778REOz4iRSoVQtBfMt5fVqkw/edit#gid=0")
+```
+
+Register the key with R.
+
+```{r}
+bap <- gs_key(key)
+```
+
+Let's take a look.
+
+```{r}
+bap
+```
+
+The worksheet names alone can be extracted with this command.
+
+```{r}
+names <- gs_ws_ls(bap)
+names
+```
+
+We can edit the google sheets from within R now, but for this exercise I'll just download the csv files.
+
+```{r}
+(sheeeeet <- map(names, gs_read_csv, ss = bap))
+```
+
+This is a list of data frames which we can easily manipulate.
+
+Let's build the JSON. I've set the pretty argument to TRUE for viewing purposes.
+
+```{r}
+map(sheeeeet, toJSON, pretty = TRUE) %>%
+  reduce(cat) # I use cat to print the output here, but paste is the function to store the output
+```
+
+The paste function used to reduce the list of JSON files into one is incorrect. I've looked for a function to combine these correctly but it seems the JSONlite package does not have it. I'll probably just write a custom function to preprocess the data so that it can be pasted correctly.
+
+Let's recap the entire script.
+
+```{r}
+library("googlesheets")
+library("dplyr")
+library("jsonlite")
+library("purrr")
+
+sheets_url <- "https://docs.google.com/spreadsheets/d/1xvODUunKQ1RUQykaoE778REOz4iRSoVQtBfMt5fVqkw/edit#gid=0"
+json_file <- "sandbox2.json"
+
+key <- extract_key_from_url(sheets_url)
+bap <- gs_key(key)
+names <- gs_ws_ls(bap)
+sheeeeet <- map(names, gs_read_csv, ss = bap)
+jsoooon <- map(sheeeeet, toJSON, pretty = TRUE) %>%
+  map2(names, fix_json) %>%
+  reduce(paste, sep = "\n")
+
+write(jsoooon, file = json_file)
+```
+Code rewritten from a functional programming perspective. The codeblock can be wrapped inside a single function.
+
+Theoretically flexible for any number of sheets, sheet names, tidy data structures. However, Google Drive limits the amount of requests that can come in to around 6 sheets at a time, so be careful. 
+
+```{r}
+sheets_url <- "https://docs.google.com/spreadsheets/d/1xvODUunKQ1RUQykaoE778REOz4iRSoVQtBfMt5fVqkw/edit#gid=0"
+
+sheets_url %>%
+  extract_key_from_url %>%
+  gs_key %>%
+  gs_ws_ls %>%
+  map(gs_read_csv, ss = bap) %>%
+  map(toJSON, pretty = TRUE) %>%
+  reduce(paste) %>%
+  write("sandbox.json")
+
+#file_name input must be character
+
+gs_to_json <- function(url, file_name){
+  url %>%
+  extract_key_from_url %>%
+  gs_key %>%
+  gs_ws_ls %>%
+  map(gs_read_csv, ss = bap) %>%
+  map(toJSON, pretty = TRUE) %>%
+  reduce(paste, sep = "\n") %>%
+  write(file = file_name)
+}
+```
+
+Write a function to fix the JSON output.
+
+Replace [ with {, ] with }.
+Put name of sheet in the beginning.
+
+```{r}
+c <- str_replace(b, pattern = '\\[', replacement = "\\[\"master\":")
+d <- str_replace(c, pattern = "\\[", replacement = "\\{")
+e <- str_replace(d, pattern = "\\]", replacement = "\\}")
+
+fix_json <- function(json_obj, json_name){
+  formatted_name <- paste0("\\[\"", json_name, "\":")
+  str_replace(json_obj, pattern = "\\[", replacement = formatted_name) %>%
+  str_replace(pattern = "\\[", replacement = "\\{") %>%
+  str_replace(pattern = "\\]", replacement = "\\}") %>%
+    return()
+}
+```
