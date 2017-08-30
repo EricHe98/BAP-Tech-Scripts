@@ -1,0 +1,84 @@
+{
+  "members": {
+    "ehebap" : {
+      "name": "Eric He",
+      "email": "ehebap@stern.nyu.edu",
+      "points_pe": "12",
+      "points_se": "9",
+      "points_ce": "10"
+    },
+    "jyw289" : {
+      "name": "Jennifer Wang",
+      "email": "jyw289@stern.nyu.edu",
+      "points_pe": "11",
+      "points_se": "9",
+      "points_ce": "6"
+    }
+  },
+  "attendance": {
+    "ehebap" : {
+      "professional": {
+        "attended" :{
+          "event 3" : "aug 3",
+          "event 4" : "aug 4"
+        },
+        "unattended" : {
+          "event 5" : "aug 3",
+          "event 6" : "aug 4"
+        } 
+      },
+      "social" : {
+        "attended" :{
+          "event 3" : "aug 3",
+          "event 4" : "aug 4"
+        },
+        "unattended" : {
+          "event 5" : "aug 3",
+          "event 6" : "aug 4"
+        }
+      },
+      "community": {
+        "attended" :{
+          "event 3" : "aug 3",
+          "event 4" : "aug 4"
+        },
+        "unattended" : {
+          "event 5" : "aug 3",
+          "event 6" : "aug 4"
+        }
+      }
+    },
+    "jyw289" : {
+      "professional": {
+        "attended" :{
+          "event 3" : "aug 3",
+          "event 4" : "aug 4"
+        },
+        "unattended" : {
+          "event 5" : "aug 3",
+          "event 6" : "aug 4"
+        }
+      },
+      "social" : {
+        "attended" :{
+          "event 3" : "aug 3",
+          "event 4" : "aug 4"
+        },
+        "unattended" : {
+          "event 5" : "aug 3",
+          "event 6" : "aug 4"
+        }
+      },
+      "community": {
+        "attended" :{
+          "event 3" : "aug 3",
+          "event 4" : "aug 4"
+        },
+        "unattended" : {
+          "event 5" : "aug 3",
+          "event 6" : "aug 4"
+        }
+      }
+    }
+  }
+}
