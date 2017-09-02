@@ -203,9 +203,10 @@ g <- list("Attendance" = list("Eric He" = list("Professional" = list("attended" 
                                            "unattended" = list("event 11" = 1,
                                                                "event 12" = 1))))
 )
-lalala <- select(event_info, event_name, event_points)
 
-member_event_tech_mat <- b
+relevant_points_info <- select(event_info, event_name, event_points)
+
+member_event_tech_mat
 member_event_tech_mat %<>% left_join(lalala, by = "event_name")
 member_event_tech_mat$attended[member_event_tech_mat$attended == TRUE] <- "Attended"
 member_event_tech_mat$attended[member_event_tech_mat$attended == FALSE] <- "Unattended"
