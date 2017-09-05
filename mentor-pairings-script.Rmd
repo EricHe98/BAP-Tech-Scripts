@@ -1,0 +1,69 @@
+---
+title: "Suggesting-Big-Little-Pairings"
+author: "Eric He"
+date: "September 4, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("dplyr")
+library("readxl")
+library("purrr")
+```
+
+Generate synthetic data. We have 33 candidates and 10 mentors. For each candidate, we select 5 random mentors and vice versa. Profession and hobby interests are also randomly generated.
+
+```{r}
+candidates_raw <- read_xlsx("synthetic_members.xlsx")
+mentors_raw <- read_xlsx("synthetic_mentors.xlsx")
+```
+
+```{r}
+candidates_raw
+```
+
+```{r}
+mentors_raw
+```
+
+For one candidate and one mentor, calculate all the relevant info.
+
+```{r}
+candidate_name <- 16
+mentor_name <- 8
+
+one_candidate_one_mentor <- function(candidate_name, mentor_name){
+candidate_info <- filter(candidates_raw, Name == candidate_name)
+mentor_info <- filter(mentors_raw, Name == mentor_name)
+
+both_juniors <- candidate_info$Year == 1 & mentor_info$Year == 1 # 0 being sophomore, 1 being junior, 2 being senior for the purposes of this test
+
+profession_candidate_mentor <- map_df(list(candidate_info, mentor_info), ~select(.,starts_with("Profession")))
+profession_matches <- sum(colSums(profession_candidate_mentor) == 2) # checks if they are both 1's.
+profession_total_interests <- rowSums(profession_candidate_mentor)
+profession_score <- mean(profession_matches / profession_total_interests)
+
+hobby_candidate_mentor <- map_df(list(candidate_info, mentor_info), ~select(.,starts_with("Hobby")))
+hobby_matches <- sum(colSums(hobby_candidate_mentor) == 2)
+hobby_total_interests <- rowSums(hobby_candidate_mentor)
+hobby_score <- mean(hobby_matches / hobby_total_interests)
+
+candidate_ranking_of_mentor <- which(mentor_name == select(candidate_info, starts_with("Mentor")))[1]
+  
+mentor_ranking_of_candidate <- which(candidate_name == select(mentor_info, starts_with("Candidate")))[1]
+
+row <- data_frame(mentor_name, candidate_name, mentor_ranking_of_candidate, candidate_ranking_of_mentor, hobby_score, profession_score, both_juniors)
+print(paste("Completed calculation for candidate", candidate_name, "and mentor", mentor_name))
+return(row)}
+```
+
+```{r}
+d <- expand.grid(candidates_raw$Name, mentors_raw$Name)
+finished <- map2_df(d$Var1, d$Var2, one_candidate_one_mentor) %>%
+  arrange(mentor_ranking_of_candidate, candidate_ranking_of_mentor)
+```
+
