@@ -21,36 +21,40 @@ library("reshape2")
 library("tidyr")
 
 orgsync_file <- "type-speaker_pnt-2_pen-0_sem-spring-2017_name-BAP-E-Board-Elections-Participation.xlsx"
+exemptions_file <- "exemptions_name-BAP-E-Board-Elections-Participation.xlsx"
 gs_auth()
 
 sheets_table <- gs_ls()
 
-member_event_tech_key <- filter(sheets_table, sheet_title = "member_event_tech") %>%
-  pull(sheet_key)
-
-member_event_cm_key <- filter(sheets_table, sheet_title = "member_event_cm") %>%
-  pull(sheet_key)
-
-event_info_key <- filter(sheets_table, sheet_title = "event_info") %>%
-  pull(sheet_key)
-
-
-
-member_event_tech_key <- sheets_url %>%
-  extract_key_from_url %>%
+member_event_tech_key <- filter(sheets_table, sheet_title == "member_event_tech") %>%
+  pull(sheet_key) %>%
   gs_key
 
+member_event_cm_key <- filter(sheets_table, sheet_title == "member_event_cm") %>%
+  pull(sheet_key) %>%
+  gs_key
 
+event_info_key <- filter(sheets_table, sheet_title == "event_info") %>%
+  pull(sheet_key) %>%
+  gs_key
 
-member_event_tech_mat <- gs_read_csv("event_member", ss = member_event_tech_key)
-event_info <- gs_read_csv("event_info", ss = member_event_tech_key, stringsAsFactors = FALSE)
+exemptions_key <- filter(sheets_table, sheet_title == "exemptions") %>%
+  pull(sheet_key) %>%
+  gs_key
 
 member_event_cm_mat <- "set up the google sheets here"
+member_event_tech_mat <- gs_read_csv(ss = member_event_tech_key)
+event_info <- gs_read_csv(ss = event_info_key, stringsAsFactors = FALSE)
+exemptions <- gs_read_csv(ss = exemptions_key)
 
 # if (nrow(member_event_cm_mat) != nrow(member_event_tech_mat) | ncol(member_event_cm_mat) != ncol(member_event_tech_mat)){
 #  stop("CM and Tech Committee data have differing member and/or event counts")}
 
 raw_output <- read_excel(orgsync_file, sheet = "Participation")
+new_exemptions <- read_excel(exemptions_file) %>%
+  cbind(event_name = event_name)
+exemptions %<>% rbind(new_exemptions)
+dummy_exemptions <- cbind(exemptions, exempt = TRUE) # the data frame used for joining with melted
 
 event_name <- str_extract(orgsync_file, pattern = "(?<=name-).*?(?=\\.)") %>% str_to_lower()
 event_type <- str_extract(orgsync_file, pattern = "(?m)(?<=type-)(speaker)|(community)|(social)(?=_)") %>% str_to_lower()
@@ -62,19 +66,29 @@ new_event <- data_frame(event_name, event_type, event_points, event_penalty, eve
 event_info %<>% rbind(new_event)
 
 netID_vec <- str_extract(raw_output$Email, pattern = ".*?(?=@)")
-event_attendees <- data_frame(NetID = netID_vec, event_name = TRUE) %>%
-  set_colnames(c(colnames(.)[-ncol(.)], event_name))
+event_attendees_exempt <- data_frame(NetID = netID_vec, event_name = TRUE) %>%
+  set_colnames(c(colnames(.)[-ncol(.)], event_name)) #event is called "event_name" bc R is retarded, so we have to replace event_name column name with actual name of event
 
-updated_member_event_tech_mat <- full_join(member_event_tech_mat, event_attendees, by = "NetID") %>%
-  mutate_all(~replace(., which(is.na(.)), FALSE))
+updated_member_event_tech_mat <- full_join(member_event_tech_mat, event_attendees_exempt, by = "NetID") %>%
+  mutate_all(~replace(., which(is.na(.)), FALSE)) # replace NAs from joining with FALSE
 
 melted <- melt(updated_member_event_tech_mat, id = "NetID", variable.name = "event_name", value.name = "attended") %>%
-  left_join(event_info, by = "event_name")
+  left_join(event_info, by = "event_name") %>%
+  full_join(dummy_exemptions, by = c("NetID", "event_name"))
+
+melted$exempt[which(is.na(melted$exempt))] <- FALSE
+
+if (TRUE %in% (melted$exempt & melted$attended)){
+  problem_members <- melted$NetID[which(melted$exempt & melted$attended)]
+  paste("Members", problem_members, "attended an event they were exempted from; they have been counted as attendants, please correct CM data sheet if they did not actually attend.")
+}
 
 updated_points <- group_by(melted, NetID, event_type) %>%
-  summarise(total_points = sum(event_points * attended - event_penalty * !attended)) %>%
-  spread(member_event_tech_key = "event_type", value = "total_points")
+  summarise(total_points = sum(event_points * attended - event_penalty * !attended + event_penalty * (exempt & !attended))) %>%
+  spread(key = "event_type", value = "total_points")
+```
 
+```{r}
 write.csv(updated_member_event_tech_mat, row.names = FALSE, file = "member_event.csv")
 gs_upload("member_event.csv", sheet_title = "member_event_tech_mat", overwrite = TRUE)
 
