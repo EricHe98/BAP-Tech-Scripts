@@ -26,6 +26,10 @@ gs_auth()
 
 sheets_table <- gs_ls()
 
+new_event_key <- filter(sheets_table, sheet_title == "Events (Responses)") %>%
+  pull(sheet_key) %>%
+  gs_key
+
 member_event_tech_key <- filter(sheets_table, sheet_title == "member_event_tech") %>%
   pull(sheet_key) %>%
   gs_key
@@ -51,6 +55,7 @@ member_event_tech_mat <- gs_read_csv(ss = member_event_tech_key)
 event_info <- gs_read_csv(ss = event_info_key, stringsAsFactors = FALSE)
 exemptions_tech <- gs_read_csv(ss = exemptions_tech_key)
 exemptions_cm <- gs_read_csv(ss = exemptions_cm_key)
+new_event <- gs_read_csv(ss = new_event_key)
 
 if (nrow(member_event_cm_mat) != nrow(member_event_tech_mat) | ncol(member_event_cm_mat) != ncol(member_event_tech_mat)){
 stop("CM and Tech Committee data have differing member and/or event counts")}
