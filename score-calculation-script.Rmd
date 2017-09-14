@@ -19,6 +19,9 @@ library("magrittr") # pipes
 library("readxl")
 library("reshape2")
 library("tidyr")
+library("googledrive")
+
+drive_auth()
 
 orgsync_file <- "type-speaker_pnt-2_pen-0_sem-spring-2017_name-BAP-E-Board-Elections-Participation.xlsx"
 exemptions_file <- "exemptions_name-BAP-E-Board-Elections-Participation.xlsx"
@@ -56,6 +59,8 @@ event_info <- gs_read_csv(ss = event_info_key, stringsAsFactors = FALSE)
 exemptions_tech <- gs_read_csv(ss = exemptions_tech_key)
 exemptions_cm <- gs_read_csv(ss = exemptions_cm_key)
 new_event <- gs_read_csv(ss = new_event_key)
+
+new_event_names <- new_event %>% pull(Name)
 
 if (nrow(member_event_cm_mat) != nrow(member_event_tech_mat) | ncol(member_event_cm_mat) != ncol(member_event_tech_mat)){
 stop("CM and Tech Committee data have differing member and/or event counts")}
