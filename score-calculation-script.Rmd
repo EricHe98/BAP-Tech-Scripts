@@ -21,51 +21,69 @@ library("reshape2")
 library("tidyr")
 library("googledrive")
 
+# Authorize googledrive and googlesheets to access and make edits to the Drive.
 drive_auth()
-
 gs_auth()
+
+# Get the information of all the sheets in the Drive.
 
 sheets_table <- gs_ls()
 
+# Pull the API key used to access the sheet for each sheet.
+
 event_info_key <- filter(sheets_table, sheet_title == "Events (Responses)") %>%
-  pull(sheet_key) %>%
-  gs_key
+  pull(sheet_key) 
 
 member_event_tech_key <- filter(sheets_table, sheet_title == "member_event_tech") %>%
-  pull(sheet_key) %>%
-  gs_key
+  pull(sheet_key)
 
 member_event_cm_key <- filter(sheets_table, sheet_title == "member_event_cm") %>%
-  pull(sheet_key) %>%
-  gs_key
+  pull(sheet_key) 
 
 exemptions_tech_key <- filter(sheets_table, sheet_title == "exemptions_tech") %>%
-  pull(sheet_key) %>%
-  gs_key
+  pull(sheet_key) 
 
 exemptions_cm_key <- filter(sheets_table, sheet_title == "exemptions_cm") %>%
-  pull(sheet_key) %>%
-  gs_key
+  pull(sheet_key)
 
-member_event_cm_mat <- gs_read_csv(ss = member_event_cm_key)
-member_event_tech_mat <- gs_read_csv(ss = member_event_tech_key)
-exemptions_tech <- gs_read_csv(ss = exemptions_tech_key)
-exemptions_cm <- gs_read_csv(ss = exemptions_cm_key)
-event_info <- gs_read_csv(ss = event_info_key)
+point_scores_cm_key <- filter(sheets_table, sheet_title == "point_scores_cm") %>%
+  pull(sheet_key)
+
+point_scores_tech_key <- filter(sheets_table, sheet_title == "point_scores_tech") %>%
+  pull(sheet_key)
+
+# Read in the tables.
+
+member_event_cm_mat <- gs_read_csv(ss = gs_key(member_event_cm_key))
+member_event_tech_mat <- gs_read_csv(ss = gs_key(member_event_tech_key))
+exemptions_tech <- gs_read_csv(ss = gs_key(exemptions_tech_key))
+exemptions_cm <- gs_read_csv(ss = gs_key(exemptions_cm_key))
+event_info <- gs_read_csv(ss = gs_key(event_info_key))
 
 # Empty columns are of class "logical" by default. We change to correct type to avoid a join error later.
 
 member_event_cm_mat$NetID %<>% as.character
 member_event_tech_mat$NetID %<>% as.character
 
+# Check that CM and Tech committee matrices are of the same shape;
+# Differing number of rows imply different number of members
+# Differing number of columns imply different number of events
+
 if (nrow(member_event_cm_mat) != nrow(member_event_tech_mat) | ncol(member_event_cm_mat) != ncol(member_event_tech_mat)){
 stop("CM and Tech Committee data have differing member and/or event counts")}
 
-event_names <- event_info %>% pull(Name)
+# Get the names of newly uploaded events.
+# Check if there are duplicated event names; duplicated event names break the script,
+# Check if there are any new uploaded events.
 
+event_names <- event_info %>% pull(Name)
+if (anyDuplicated(event_names) != 0){
+  stop("At least two events have the same name.")
+}
 new_event_names <- event_names[!(event_names %in% colnames(member_event_cm_mat))]
-  
-  #filter(event_info, (!Name %in% colnames(member_event_cm_mat)))
+if (is_empty(new_event_names) == TRUE){
+  stop("All events have already been calculated.")
+}
 
 for (new_event in new_event_names){
 
@@ -87,16 +105,18 @@ new_event_data <- read_excel("new_event.xlsx")
 
 # Read and load new exemptions data. Return empty data frame if no new exemptions data is available.
 
-if (is.na(new_exemptions_id) == FALSE){
-  new_exemptions_id %>%
-    as_id %>%
-    drive_download(path = "new_exemptions.xlsx", overwrite = TRUE)
-  new_exemptions <- read_excel("new_exemptions.xlsx") %>%
-    cbind(Name = new_event)
-} else {
-  print(paste("No exemptions file for the", new_event, "event"))
-  new_exemptions <- data_frame(NetID = "", Name = "")
-}
+# if (is.na(new_exemptions_id) == FALSE){
+#  new_exemptions_id %>%
+#    as_id %>%
+#    drive_download(path = "new_exemptions.xlsx", overwrite = TRUE)
+#  new_exemptions <- read_excel("new_exemptions.xlsx") %>%
+#    cbind(Name = new_event)
+#} else {
+#  print(paste("No exemptions file for the", new_event, "event"))
+#  new_exemptions <- data_frame(NetID = "", Name = "")
+#}
+
+new_exemptions <- data_frame(NetID = "aat413", Name = "Deloitte Information Session")
 
 # Integrate new exemptions data into existing exemptions data.
 
@@ -106,15 +126,19 @@ exemptions_tech %<>% rbind(new_exemptions)
 # Add dummy "exempt" variable to tag exempted members in the melted_cm table created below.
 # If no exemptions data is available, return empty data frame.
 
-if (is_empty(exemptions_cm) == FALSE){
-dummy_exemptions_cm <- cbind(exemptions_cm, exempt = TRUE) # the data frame used for joining with melted_cm
-dummy_exemptions_tech <- cbind(exemptions_tech, exempt = TRUE)
-} else {
-  dummy_exemptions_cm <- data_frame(NetID = "", Name = "", exempt = "")
-  dummy_exemptions_cm$exempt %<>% as.logical
-  dummy_exemptions_tech <- data_frame(NetID = "", Name = "", exempt = "")
-  dummy_exemptions_tech$exempt %<>% as.logical
+if (nrow(exemptions_cm) != 0){
+  dummy_exemptions_cm %<>% cbind(exempt = TRUE)
+  dummy_exemptions_tech %<>% cbind(exempt = TRUE)
 }
+
+dummy_exemptions_cm <- when(exemptions_cm,
+                            nrow(.) != 0 ~ cbind(., exempt = TRUE),
+                            ~ data_frame(NetID = "", Name = "", exempt = ""))
+dummy_exemptions_cm$exempt %<>% as.logical
+dummy_exemptions_tech <- when(exemptions_tech,
+                            nrow(.) != 0 ~ cbind(., exempt = TRUE),
+                            ~ data_frame(NetID = "", Name = "", exempt = ""))
+dummy_exemptions_tech$exempt %<>% as.logical
 
 # Extract NetIDs from OrgSync output email column
 
@@ -183,22 +207,34 @@ updated_points_tech <- group_by(melted_tech, NetID, Type) %>%
 # Upload everything back onto Google Drive.
 
 write.csv(member_event_tech_mat, row.names = FALSE, file = "member_event_tech.csv")
-gs_upload("member_event_tech.csv", sheet_title = "member_event_tech", overwrite = TRUE)
+member_event_tech_key %>%
+  as_id %>%
+  drive_update(media = "member_event_tech.csv")
 
 write.csv(member_event_cm_mat, row.names = FALSE, file = "member_event_cm.csv")
-gs_upload("member_event_cm.csv", sheet_title = "member_event_cm", overwrite = TRUE)
-
-write.csv(updated_points_cm, row.names = FALSE, file = "point_scores_cm.csv")
-gs_upload("point_scores_cm.csv", sheet_title = "point_scores_cm", overwrite = TRUE)
+member_event_cm_key %>%
+  as_id %>%
+  drive_update(media = "member_event_cm.csv")
 
 write.csv(updated_points_tech, row.names = FALSE, file = "point_scores_tech.csv")
-gs_upload("point_scores_tech.csv", sheet_title = "point_scores_tech", overwrite = TRUE)
+point_scores_tech_key %>%
+  as_id %>%
+  drive_update(media = "point_scores_tech.csv")
+
+write.csv(updated_points_cm, row.names = FALSE, file = "point_scores_cm.csv")
+point_scores_cm_key %>%
+  as_id %>%
+  drive_update(media = "point_scores_cm.csv")
 
 write.csv(exemptions_tech, row.names = FALSE, file = "exemptions_tech.csv")
-gs_upload("exemptions_tech.csv", sheet_title = "exemptions_tech", overwrite = TRUE)
+exemptions_tech_key %>%
+  as_id %>%
+  drive_update(media = "exemptions_tech.csv")
 
 write.csv(exemptions_cm, row.names = FALSE, file = "exemptions_cm.csv")
-gs_upload("exemptions_cm.csv", sheet_title = "exemptions_cm", overwrite = TRUE)
+exemptions_cm_key %>%
+  as_id %>%
+  drive_update(media = "exemptions_cm.csv")
 
 # Prepare for JSON conversion. JSON format is "event name": "event attendance" key-value pair.
 # If candidates attended, they are tagged as Attended.
@@ -240,3 +276,4 @@ attendance_json <- toJSON(big_list, pretty = TRUE)
 write(attendance_json, file = "attendance.json")
 ```
 
+Check out purrr:pluck for a possible speedup to the JSON
