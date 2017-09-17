@@ -10,16 +10,37 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library("dplyr")
-library("readxl")
 library("purrr")
+library("googlesheets") # manipulate google sheets
+library("dplyr") # munge data
+library("jsonlite") # write to JSON
+library("purrr") # functionals
+library("stringr") # text processing
+library("googledrive")
+```
+
+```{r}
+gs_auth()
+```
+
+```{r}
+sheets_table <- gs_ls()
 ```
 
 Generate synthetic data. We have 33 candidates and 10 mentors. For each candidate, we select 5 random mentors and vice versa. Profession and hobby interests are also randomly generated.
 
 ```{r}
-candidates_raw <- read_xlsx("synthetic_members.xlsx")
-mentors_raw <- read_xlsx("synthetic_mentors.xlsx")
+candidates_key <- filter(sheets_table, sheet_title == "BAP Fall 2017 Ranking Application (for Mentees) (Responses)") %>% 
+  pull(sheet_key)
+candidates_raw <- candidates_key[1] %>%
+  gs_key %>%
+  gs_read_csv()
+
+mentors_key <- filter(sheets_table, sheet_title == "BAP Fall 2017 Ranking Application (for Mentors) (Responses)") %>% 
+  pull(sheet_key)
+mentors_raw <- mentors_key %>%
+  gs_key %>%
+  gs_read_csv()
 ```
 
 ```{r}
@@ -30,40 +51,63 @@ candidates_raw
 mentors_raw
 ```
 
+Write the function to calculate hobby and profession similarity scores.
+
+```{r}
+score_calculator <- function(candidate_info, mentor_info, keyword){
+  candidate_mentor_pairing <- map(list(candidate_info, mentor_info), ~select(., starts_with(keyword))) %>%
+    map(t) %>%
+    map(as.vector) %>%
+    map(~subset(., !is.na(.)))
+  candidate_match <- candidate_mentor_pairing[[1]] %in% candidate_mentor_pairing[[2]] %>%
+    sum(.) / length(candidate_mentor_pairing[[1]])
+  mentor_match <- candidate_mentor_pairing[[2]] %in% candidate_mentor_pairing[[1]] %>%
+    sum(.) / length(candidate_mentor_pairing[[2]])
+  score <- mean(c(candidate_match, mentor_match))
+  return(score)
+}
+```
+
 For one candidate and one mentor, calculate all the relevant info.
 
 ```{r}
-candidate_name <- 16
-mentor_name <- 8
+candidate_name <- "Bill He"
+mentor_name <- "Bill Shen"
 
 one_candidate_one_mentor <- function(candidate_name, mentor_name){
 candidate_info <- filter(candidates_raw, Name == candidate_name)
 mentor_info <- filter(mentors_raw, Name == mentor_name)
 
-both_juniors <- candidate_info$Year == 1 & mentor_info$Year == 1 # 0 being sophomore, 1 being junior, 2 being senior for the purposes of this test
+valid_match <- candidate_info$Year == "Junior" & mentor_info$Year == "Junior"
 
-profession_candidate_mentor <- map_df(list(candidate_info, mentor_info), ~select(.,starts_with("Profession")))
-profession_matches <- sum(colSums(profession_candidate_mentor) == 2) # checks if they are both 1's.
-profession_total_interests <- rowSums(profession_candidate_mentor)
-profession_score <- mean(profession_matches / profession_total_interests)
+profession_score <- score_calculator(candidate_info, mentor_info, keyword = "Profession")
+hobby_score <- score_calculator(candidate_info, mentor_info, keyword = "Hobbies")
 
-hobby_candidate_mentor <- map_df(list(candidate_info, mentor_info), ~select(.,starts_with("Hobby")))
-hobby_matches <- sum(colSums(hobby_candidate_mentor) == 2)
-hobby_total_interests <- rowSums(hobby_candidate_mentor)
-hobby_score <- mean(hobby_matches / hobby_total_interests)
-
-candidate_ranking_of_mentor <- which(mentor_name == select(candidate_info, starts_with("Mentor")))[1]
+candidate_ranking_of_mentor <- which(as.character(mentor_name) == select(candidate_info, starts_with("Mentor")))[1]
   
-mentor_ranking_of_candidate <- which(candidate_name == select(mentor_info, starts_with("Candidate")))[1]
+mentor_ranking_of_candidate <- which(as.character(candidate_name) == select(mentor_info, starts_with("Mentee")))[1]
 
-row <- data_frame(mentor_name, candidate_name, mentor_ranking_of_candidate, candidate_ranking_of_mentor, hobby_score, profession_score, both_juniors)
+row <- data_frame(mentor_name, candidate_name, mentor_ranking_of_candidate, candidate_ranking_of_mentor, profession_score, hobby_score, valid_match)
 print(paste("Completed calculation for candidate", candidate_name, "and mentor", mentor_name))
 return(row)}
 ```
 
+Generate scores for all possible candidate-mentor pairings.
+
 ```{r}
-d <- expand.grid(candidates_raw$Name, mentors_raw$Name)
-finished <- map2_df(d$Var1, d$Var2, one_candidate_one_mentor) %>%
-  arrange(mentor_ranking_of_candidate, candidate_ranking_of_mentor)
+all_pairings <- expand.grid(candidates_raw$Name, mentors_raw$Name)
+finished <- map2_df(all_pairings$Var1, all_pairings$Var2, one_candidate_one_mentor) %>%
+  filter(valid_match == TRUE) %>%
+  arrange(mentor_ranking_of_candidate, candidate_ranking_of_mentor, profession_score, hobby_score)
 ```
 
+Upload the output to the Google Sheets in the Mentor folder.
+
+```{r}
+write.csv(finished, row.names = FALSE, file = "bap_2017_ranking_application_transformed.csv")
+sheets_table %>%
+  filter(sheet_title == "bap_2017_ranking_application_transformed") %>%
+  pull(sheet_key) %>%
+  as_id %>%
+  drive_update(media = "bap_2017_ranking_application_transformed.csv")
+```
