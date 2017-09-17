@@ -32,7 +32,10 @@ sheets_table <- gs_ls()
 # Pull the API key used to access the sheet for each sheet.
 
 event_info_key <- filter(sheets_table, sheet_title == "Events (Responses)") %>%
-  pull(sheet_key) 
+  pull(sheet_key)
+
+event_info_cm_key <- filter(sheets_table, sheet_title = "event_info_cm") %>%
+  pull(sheet_key)
 
 member_event_tech_key <- filter(sheets_table, sheet_title == "member_event_tech") %>%
   pull(sheet_key)
@@ -235,6 +238,11 @@ write.csv(exemptions_cm, row.names = FALSE, file = "exemptions_cm.csv")
 exemptions_cm_key %>%
   as_id %>%
   drive_update(media = "exemptions_cm.csv")
+
+write.csv(event_info, row.names = FALSE, file = "event_info.csv")
+event_info_cm_key %>%
+  as_id %>%
+  drive_update(media = "event_info.csv")
 
 # Prepare for JSON conversion. JSON format is "event name": "event attendance" key-value pair.
 # If candidates attended, they are tagged as Attended.
