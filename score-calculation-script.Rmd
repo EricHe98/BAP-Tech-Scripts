@@ -31,10 +31,10 @@ sheets_table <- gs_ls()
 
 # Pull the API key used to access the sheet for each sheet.
 
-event_info_key <- filter(sheets_table, sheet_title == "Events (Responses)") %>%
+event_info_key <- filter(sheets_table, sheet_title == "Events") %>%
   pull(sheet_key)
 
-event_info_cm_key <- filter(sheets_table, sheet_title = "event_info_cm") %>%
+event_info_cm_key <- filter(sheets_table, sheet_title == "event_info_cm") %>%
   pull(sheet_key)
 
 member_event_tech_key <- filter(sheets_table, sheet_title == "member_event_tech") %>%
@@ -55,6 +55,8 @@ point_scores_cm_key <- filter(sheets_table, sheet_title == "point_scores_cm") %>
 point_scores_tech_key <- filter(sheets_table, sheet_title == "point_scores_tech") %>%
   pull(sheet_key)
 
+current_candidates <- read_xlsx("BAP-Fall-Candidates.xlsx")
+
 # Read in the tables.
 
 member_event_cm_mat <- gs_read_csv(ss = gs_key(member_event_cm_key))
@@ -62,6 +64,10 @@ member_event_tech_mat <- gs_read_csv(ss = gs_key(member_event_tech_key))
 exemptions_tech <- gs_read_csv(ss = gs_key(exemptions_tech_key))
 exemptions_cm <- gs_read_csv(ss = gs_key(exemptions_cm_key))
 event_info <- gs_read_csv(ss = gs_key(event_info_key))
+
+# MAKE SURE TO KEEP THIS UPDATED EVERY SEMESTER! MAKE SURE THE NETID FIELD IS LABELED "NetID"!
+
+current_candidates <- read_xlsx("BAP-Fall-Candidates.xlsx")
 
 # Empty columns are of class "logical" by default. We change to correct type to avoid a join error later.
 
@@ -98,8 +104,21 @@ new_event_id <- filter(event_info, Name == new_event) %>%
 
 # Do not convert to Google Drive ID yet; check if exemptions data is available first.
 
-new_exemptions_id <- filter(event_info, Name == new_event) %>%
+new_exemptions <- filter(event_info, Name == new_event) %>%
   pull(Exemptions)
+
+if (is.na(new_exemptions) == FALSE){
+  new_exemptions %<>% str_split(pattern = ",") %>% # careful not to str_split twice when running manually!
+  unlist %>%
+  str_extract(pattern = "(?<=-).*")
+
+new_exemptions_df <- data_frame(NetID = new_exemptions) %>%
+  cbind(Name = new_event)
+
+# Integrate new exemptions data into existing exemptions data.
+
+exemptions_cm %<>% rbind(new_exemptions_df)
+exemptions_tech %<>% rbind(new_exemptions_df)}
 
 # Read and load new event data.
 
@@ -119,20 +138,15 @@ new_event_data <- read_excel("new_event.xlsx")
 #  new_exemptions <- data_frame(NetID = "", Name = "")
 #}
 
-new_exemptions <- data_frame(NetID = "aat413", Name = "Deloitte Information Session")
 
-# Integrate new exemptions data into existing exemptions data.
-
-exemptions_cm %<>% rbind(new_exemptions)
-exemptions_tech %<>% rbind(new_exemptions)
 
 # Add dummy "exempt" variable to tag exempted members in the melted_cm table created below.
 # If no exemptions data is available, return empty data frame.
 
-if (nrow(exemptions_cm) != 0){
-  dummy_exemptions_cm %<>% cbind(exempt = TRUE)
-  dummy_exemptions_tech %<>% cbind(exempt = TRUE)
-}
+#if (nrow(exemptions_cm) != 0){
+#  dummy_exemptions_cm %<>% cbind(exempt = TRUE)
+#  dummy_exemptions_tech %<>% cbind(exempt = TRUE)
+#}
 
 dummy_exemptions_cm <- when(exemptions_cm,
                             nrow(.) != 0 ~ cbind(., exempt = TRUE),
@@ -156,12 +170,17 @@ event_attendees <- data_frame(NetID = netID_vec, Name = TRUE) %>%
 # NAs created by the join operation are replaced with FALSE, 
 # since if existing members are not in the event_attendees table, they did not attend the new event
 # and if a new member is added as a row, the new member did not attend any of the previous events
+# At the end, filter out any random NetIDs which do not correspond to candidates
 
 member_event_cm_mat %<>% full_join(event_attendees, by = "NetID") %>%
-  mutate_all(~replace(., which(is.na(.)), FALSE))
+  mutate_all(~replace(., which(is.na(.)), FALSE)) %>%
+  filter(NetID %in% current_candidates$NetID)
 member_event_tech_mat %<>% full_join(event_attendees, by = "NetID") %>%
-  mutate_all(~replace(., which(is.na(.)), FALSE))
+  mutate_all(~replace(., which(is.na(.)), FALSE)) %>%
+  filter(NetID %in% current_candidates$NetID)
 }
+
+
 
 # Perform a melt operation so that each row is a member-event pair. 
 # Join with event and exemption information.
@@ -186,8 +205,10 @@ melted_tech$exempt[which(is.na(melted_tech$exempt))] <- FALSE
 # Check to see which candidates received exemption status, and then subsequently attended the event
 
 if (TRUE %in% (melted_cm$exempt & melted_cm$attended)){
-  problem_members <- melted_cm$NetID[which(melted_cm$exempt & melted_cm$attended)]
-  paste("Members", problem_members, "attended an event they were exempted from; they have been counted as attendants, please correct CM data sheet if they did not actually attend.")
+  problem_members <- melted_cm[which(melted_cm$exempt & melted_cm$attended),] %>%
+    select(NetID, Name)
+  problem_members %<>% left_join(current_candidates, by = "NetID")
+  paste("Members", problem_members$`First Name`, problem_members$`Last Name`, "attended", problem_members$Name, "which they were exempted from; they have been counted as attendants, please correct CM data sheet if they did not actually attend.")
 }
 
 # Points are calculated per member, per event type (Professional, Social, Community).
@@ -200,10 +221,12 @@ if (TRUE %in% (melted_cm$exempt & melted_cm$attended)){
 
 updated_points_cm <- group_by(melted_cm, NetID, Type) %>%
   summarise(total_points = sum(Points * attended - Penalty * !attended + Penalty * (exempt & !attended))) %>%
-  spread(key = "Type", value = "total_points")
+  spread(key = "Type", value = "total_points") %>%
+  left_join(current_candidates, by = "NetID")
 updated_points_tech <- group_by(melted_tech, NetID, Type) %>%
   summarise(total_points = sum(Points * attended - Penalty * !attended + Penalty * (exempt & !attended))) %>%
-  spread(key = "Type", value = "total_points")
+  spread(key = "Type", value = "total_points") %>%
+  left_join(current_candidates, by = "NetID")
 ```
 
 ```{r}
@@ -267,9 +290,9 @@ sorted <- split(melted_cm, list(melted_cm$NetID, melted_cm$Type, melted_cm$atten
 
 # Convert the flat list into nested list one triplet at a time.
 
-for (netid in melted_cm$NetID){
-  for (type in melted_cm$Type){
-    for (attendance in melted_cm$attended){
+for (netid in unique(melted_cm$NetID)){
+  for (type in unique(melted_cm$Type)){
+    for (attendance in unique(melted_cm$attended)){
       small_list[[attendance]] <- sorted[[(paste(netid, type, attendance, sep = "."))]]
     }
     medium_list[[type]] <- small_list
