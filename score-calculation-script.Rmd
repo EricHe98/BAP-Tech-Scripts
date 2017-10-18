@@ -55,7 +55,8 @@ point_scores_cm_key <- filter(sheets_table, sheet_title == "point_scores_cm") %>
 point_scores_tech_key <- filter(sheets_table, sheet_title == "point_scores_tech") %>%
   pull(sheet_key)
 
-current_candidates <- read_xlsx("BAP-Fall-Candidates.xlsx")
+cs_signups_key <- filter(sheets_table, sheet_title == "cs_signups") %>%
+  pull(sheet_key)
 
 # Read in the tables.
 
@@ -64,6 +65,7 @@ member_event_tech_mat <- gs_read_csv(ss = gs_key(member_event_tech_key))
 exemptions_tech <- gs_read_csv(ss = gs_key(exemptions_tech_key))
 exemptions_cm <- gs_read_csv(ss = gs_key(exemptions_cm_key))
 event_info <- gs_read_csv(ss = gs_key(event_info_key))
+cs_signups <- gs_read_csv(ss = gs_key(cs_signups_key))
 
 # MAKE SURE TO KEEP THIS UPDATED EVERY SEMESTER! MAKE SURE THE NETID FIELD IS LABELED "NetID"!
 
@@ -97,15 +99,24 @@ if (is_empty(new_event_names) == TRUE){
 for (new_event in new_event_names){
 
 # Use the new event name to get the corresponding Google Drive ID for the attendance data.
+  
+new_event_info <- filter(event_info, Name == new_event)
 
-new_event_id <- filter(event_info, Name == new_event) %>%
-  pull(Attendees) %>%
-  as_id()
+if (new_event_info$Type == "Professional" | new_event_info$Type == "Social"){
+  new_event_id <- new_event_info %>%
+    pull(Attendees) %>%
+    as_id()
+}
 
 # Do not convert to Google Drive ID yet; check if exemptions data is available first.
 
-new_exemptions <- filter(event_info, Name == new_event) %>%
-  pull(Exemptions)
+if (new_event_info$Type == "Professional" | new_event_info$Type == "Social"){
+  new_exemptions <- new_event_info %>%
+    pull(Exemptions)}
+else if (new_event_info$Type == "Community"){
+  new_exemptions <- new_event_info %>%
+    pull(`CS Attendees [Exempted]`)
+}
 
 if (is.na(new_exemptions) == FALSE){
   new_exemptions %<>% str_split(pattern = ",") %>% # careful not to str_split twice when running manually!
@@ -119,47 +130,60 @@ new_exemptions_df <- data_frame(NetID = new_exemptions) %>%
 
 exemptions_cm %<>% rbind(new_exemptions_df)
 exemptions_tech %<>% rbind(new_exemptions_df)}
+else {new_exemptions <- ""}
 
-# Read and load new event data.
+# For community service events, candidates who sign up for the events are the only ones NOT exempt from the event
 
-drive_download(file = new_event_id, path = "new_event.xlsx", overwrite = TRUE)
-new_event_data <- read_excel("new_event.xlsx")
+if (new_event_info$Type == "Community"){
+  if (is.na(new_event_info$`CS Attendees [Signed Up]` == TRUE)){
+    stop(print(paste("No signup data for community service event", new_event)))
+  }
+new_cs_signups <- new_event_info$`CS Attendees [Signed Up]` %>%
+  str_split(pattern = ",") %>%
+  unlist %>%
+  str_extract(pattern = "(?<=-).*")
 
-# Read and load new exemptions data. Return empty data frame if no new exemptions data is available.
+new_cs_signups_df <- data_frame(NetID = new_cs_signups) %>%
+  mutate(exempt = NetID %in% new_exemptions) %>%
+  cbind(Name = new_event)
 
-# if (is.na(new_exemptions_id) == FALSE){
-#  new_exemptions_id %>%
-#    as_id %>%
-#    drive_download(path = "new_exemptions.xlsx", overwrite = TRUE)
-#  new_exemptions <- read_excel("new_exemptions.xlsx") %>%
-#    cbind(Name = new_event)
-#} else {
-#  print(paste("No exemptions file for the", new_event, "event"))
-#  new_exemptions <- data_frame(NetID = "", Name = "")
-#}
+cs_signups %<>% rbind(new_cs_signups_df)
+}
 
+# If professional or social event, read and load new event data.
 
+if (new_event_info$Type == "Professional" | new_event_info$Type == "Social"){
+  drive_download(file = new_event_id, path = "new_event.xlsx", overwrite = TRUE)
+  new_event_data <- read_excel("new_event.xlsx")}
 
 # Add dummy "exempt" variable to tag exempted members in the melted_cm table created below.
 # If no exemptions data is available, return empty data frame.
-
-#if (nrow(exemptions_cm) != 0){
-#  dummy_exemptions_cm %<>% cbind(exempt = TRUE)
-#  dummy_exemptions_tech %<>% cbind(exempt = TRUE)
-#}
+# For community service members, everyone who did not sign up for the event is exempt.
 
 dummy_exemptions_cm <- when(exemptions_cm,
                             nrow(.) != 0 ~ cbind(., exempt = TRUE),
-                            ~ data_frame(NetID = "", Name = "", exempt = ""))
+                            ~ data_frame(NetID = "", Name = "", exempt = "")) %>%
+  rbind(cs_signups)
 dummy_exemptions_cm$exempt %<>% as.logical
 dummy_exemptions_tech <- when(exemptions_tech,
                             nrow(.) != 0 ~ cbind(., exempt = TRUE),
-                            ~ data_frame(NetID = "", Name = "", exempt = ""))
+                            ~ data_frame(NetID = "", Name = "", exempt = "")) %>%
+  rbind(cs_signups)
 dummy_exemptions_tech$exempt %<>% as.logical
 
-# Extract NetIDs from OrgSync output email column
+# Parse NetIDs. For Professional and Social, NetIDs are extracted from OrgSync output email column
+# For Community, NetIDs are extracted from CS Attendees column.
 
-netID_vec <- str_extract(new_event_data$Email, pattern = ".*?(?=@)")
+if (new_event_info$Type == "Professional" | new_event_info$Type == "Social"){
+  netID_vec <- str_extract(new_event_data$Email, pattern = ".*?(?=@)")}
+else if (new_event_info$Type == "Community"){
+  netID_vec <- new_event_info %>%
+    pull(`CS Attendees [Attended]`) %>%
+    str_split(pattern = ",") %>%
+    unlist %>%
+    str_extract(pattern = "(?<=-).*")
+}
+else stop("New event is not Professional, Social or Community event type.")
 
 # Create new table to tag members who attended the new event. Rename the "Name" row to the name of the new event.
 
@@ -169,7 +193,8 @@ event_attendees <- data_frame(NetID = netID_vec, Name = TRUE) %>%
 # Join the newly created event_attendees table with the existing attendance tables. 
 # NAs created by the join operation are replaced with FALSE, 
 # since if existing members are not in the event_attendees table, they did not attend the new event
-# and if a new member is added as a row, the new member did not attend any of the previous events
+# and if a new member is added as a row, the new member did not attend any of the previous events.
+# An exception 
 # At the end, filter out any random NetIDs which do not correspond to candidates
 
 member_event_cm_mat %<>% full_join(event_attendees, by = "NetID") %>%
@@ -179,8 +204,6 @@ member_event_tech_mat %<>% full_join(event_attendees, by = "NetID") %>%
   mutate_all(~replace(., which(is.na(.)), FALSE)) %>%
   filter(NetID %in% current_candidates$NetID)
 }
-
-
 
 # Perform a melt operation so that each row is a member-event pair. 
 # Join with event and exemption information.
@@ -197,8 +220,10 @@ melted_tech <- melt(member_event_cm_mat, id = "NetID", variable.name = "Name", v
   filter(NetID != "")
 
 # NAs resulting from the join with the dummy exemptions table are replaced with FALSE
-# since not being present in the exemptions table means the candidate was not exempted.
+# since not being present in the exemptions table means the candidate was not exempted
+# for social and professional events. The opposite is true for community service events.
 
+melted_cm$exempt[which(is.na(melted_cm$exempt & (melted_cm$Type == "Community")))] <- TRUE
 melted_cm$exempt[which(is.na(melted_cm$exempt))] <- FALSE
 melted_tech$exempt[which(is.na(melted_tech$exempt))] <- FALSE
 
@@ -208,7 +233,7 @@ if (TRUE %in% (melted_cm$exempt & melted_cm$attended)){
   problem_members <- melted_cm[which(melted_cm$exempt & melted_cm$attended),] %>%
     select(NetID, Name)
   problem_members %<>% left_join(current_candidates, by = "NetID")
-  paste("Members", problem_members$`First Name`, problem_members$`Last Name`, "attended", problem_members$Name, "which they were exempted from; they have been counted as attendants, please correct CM data sheet if they did not actually attend.")
+  paste("Member", problem_members$`First Name`, problem_members$`Last Name`, "attended", problem_members$Name, "which they were exempted from; they have been counted as attendants, please correct CM data sheet if they did not actually attend.")
 }
 
 # Points are calculated per member, per event type (Professional, Social, Community).
@@ -305,6 +330,8 @@ for (netid in unique(melted_cm$NetID)){
 
 attendance_json <- toJSON(big_list, pretty = TRUE)
 write(attendance_json, file = "attendance.json")
+current_candidate_names2 <- readLines("candidate_netID_mapping.txt")
+write(current_candidate_names2, file = "candidate_netID_mapping.txt")
 ```
 
 Check out purrr:pluck for a possible speedup to the JSON
