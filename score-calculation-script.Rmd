@@ -324,3 +324,30 @@ write(attendance_json, file = "attendance.json")
 ```
 
 Check out purrr:pluck for a possible speedup to the JSON
+
+Build email points update
+
+```{r}
+email_vector <- c("")
+for (member_row in c(1:nrow(updated_points_cm))){
+  member_points <- updated_points_cm[member_row,]
+  member_events_professional <- filter(melted_cm, NetID == member_points$NetID)
+  email_message <- paste("Email: ", paste0(member_points$NetID, "@stern.nyu.edu"), 
+                         "\n\nHi ", paste0(member_points$`First Name`, ","), 
+                         "\n\nThis is your weekly points update.",
+                         "\n\nProfessional Points: ", member_points$Professional,
+                         "\n\nSocial Points: ", member_points$Social,
+                         "\n\nCommunity Points: ", member_points$Community,
+                         "\n\nEvents attended: \n\n   ",
+                         str_c(member_events_professional$Name[member_events_professional$Attended == "Attended"], collapse = "\n\n    "),
+                         "\n\nEvents not attended: \n\n   ",
+                         str_c(member_events_professional$Name[member_events_professional$Attended == "NotAttended"], collapse = "\n\n    "),
+                         "\n\nEvents whose penalties you have been exempted from (including CS events you did not sign up for): \n\n   ",
+                         str_c(member_events_professional$Name[member_events_professional$Attended == "Exempted"], collapse = "\n\n    "),
+                         "\n\nPlease let us know if you have any questions.")
+  email_vector %<>% append(email_message)
+}
+
+email_vector %<>% str_c(collapse = "\n\n\n")
+write(email_vector, "email_message.txt")
+```
