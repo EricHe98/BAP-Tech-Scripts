@@ -57,7 +57,7 @@ point_scores_tech_key <- filter(sheets_table, sheet_title == "point_scores_tech"
 
 # This is the CS sheet, make sure the names are consistent.
 
-cs_points_key <- filter(sheets_table, sheet_title == "Fall-17-Candidate-List") %>%
+cs_points_key <- filter(sheets_table, sheet_title == "Fall-17-Attendance") %>%
   pull(sheet_key)
 
 # Read in the tables.
@@ -112,6 +112,9 @@ new_event_names <- event_names[!(event_names %in% colnames(member_event_cm_mat))
 if (is_empty(new_event_names) == TRUE){
   stop("All events have already been calculated.")
 }
+
+# GHETTO REQUEST BY ALEX TO CHANGE ALL MANDATORY EVENTS TO HAVE PENALTY 0.5 DELETE THIS CODE AT END OF SEMESTER
+event_info %<>% mutate(Penalty = replace(event_info$Penalty, event_info$Penalty != 0, 0.5))
 
 for (new_event in new_event_names){
 
