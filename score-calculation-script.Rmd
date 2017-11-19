@@ -72,7 +72,7 @@ event_info <- gs_read_csv(ss = gs_key(event_info_key))
 # is up to the CS committee.
 
 cs_points <- gs_read_csv(ss = gs_key(cs_points_key), skip = 1) %>%
-  select(-`First Name`, -`Preferred Name`, -`Last Name`, -`Stern Email Address`, -`Class`)
+  select(-`First Name`, -`Preferred Name`, -`Last Name`, -`Stern Email Address`, -`Class`, -`Total Points_1`, -`8 or more`, -`Lower than 5`)
 
 # Get total cs points
 
@@ -122,11 +122,9 @@ for (new_event in new_event_names){
   
 new_event_info <- filter(event_info, Name == new_event)
 
-if (new_event_info$Type == "Professional" | new_event_info$Type == "Social"){
-  new_event_id <- new_event_info %>%
-    pull(Attendees) %>%
-    as_id()
-}
+new_event_id <- new_event_info %>%
+  pull(Attendees) %>%
+  as_id()
 
 # Do not convert to Google Drive ID yet; check if exemptions data is available first.
 
@@ -342,11 +340,11 @@ for (member_row in c(1:nrow(updated_points_cm))){
                          "\n\nSocial Points: ", member_points$Social,
                          "\n\nCommunity Points: ", member_points$Community,
                          "\n\nEvents attended: \n\n   ",
-                         str_c(member_events_professional$Name[member_events_professional$Attended == "Attended"], collapse = "\n\n    "),
+                         str_c(rev(member_events_professional$Name[member_events_professional$Attended == "Attended"]), collapse = "\n\n    "),
                          "\n\nEvents not attended: \n\n   ",
-                         str_c(member_events_professional$Name[member_events_professional$Attended == "NotAttended"], collapse = "\n\n    "),
+                         str_c(rev(member_events_professional$Name[member_events_professional$Attended == "NotAttended"]), collapse = "\n\n    "),
                          "\n\nEvents whose penalties you have been exempted from (including CS events you did not sign up for): \n\n   ",
-                         str_c(member_events_professional$Name[member_events_professional$Attended == "Exempted"], collapse = "\n\n    "),
+                         str_c(rev(member_events_professional$Name[member_events_professional$Attended == "Exempted"]), collapse = "\n\n    "),
                          "\n\nPlease let us know if you have any questions.")
   email_vector %<>% append(email_message)
 }
