@@ -72,7 +72,7 @@ event_info <- gs_read_csv(ss = gs_key(event_info_key))
 # is up to the CS committee.
 
 cs_points <- gs_read_csv(ss = gs_key(cs_points_key), skip = 1) %>%
-  select(-`First Name`, -`Preferred Name`, -`Last Name`, -`Stern Email Address`, -`Class`, -`Total Points_1`, -`8 or more`, -`Lower than 5`)
+  select(`NetID`, `Total Points`, starts_with("Event: "))
 
 # Get total cs points
 
