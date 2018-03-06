@@ -31,33 +31,33 @@ sheets_table <- gs_ls()
 
 # Pull the API key used to access the sheet for each sheet.
 
-event_info_key <- filter(sheets_table, sheet_title == "Events") %>%
+event_info_key <- filter(sheets_table, sheet_title == "events_spring_2018") %>%
   pull(sheet_key)
 
-event_info_cm_key <- filter(sheets_table, sheet_title == "event_info_cm") %>%
+event_info_cm_key <- filter(sheets_table, sheet_title == "event_info_cm_spring_2018") %>%
   pull(sheet_key)
 
-member_event_tech_key <- filter(sheets_table, sheet_title == "member_event_tech") %>%
+member_event_tech_key <- filter(sheets_table, sheet_title == "member_event_tech_spring_2018") %>%
   pull(sheet_key)
 
-member_event_cm_key <- filter(sheets_table, sheet_title == "member_event_cm") %>%
+member_event_cm_key <- filter(sheets_table, sheet_title == "member_event_cm_spring_2018") %>%
   pull(sheet_key) 
 
-exemptions_tech_key <- filter(sheets_table, sheet_title == "exemptions_tech") %>%
+exemptions_tech_key <- filter(sheets_table, sheet_title == "exemptions_tech_spring_2018") %>%
   pull(sheet_key) 
 
-exemptions_cm_key <- filter(sheets_table, sheet_title == "exemptions_cm") %>%
+exemptions_cm_key <- filter(sheets_table, sheet_title == "exemptions_cm_spring_2018") %>%
   pull(sheet_key)
 
-point_scores_cm_key <- filter(sheets_table, sheet_title == "point_scores_cm") %>%
+point_scores_cm_key <- filter(sheets_table, sheet_title == "point_scores_cm_spring_2018") %>%
   pull(sheet_key)
 
-point_scores_tech_key <- filter(sheets_table, sheet_title == "point_scores_tech") %>%
+point_scores_tech_key <- filter(sheets_table, sheet_title == "point_scores_tech_spring_2018") %>%
   pull(sheet_key)
 
 # This is the CS sheet, make sure the names are consistent.
 
-cs_points_key <- filter(sheets_table, sheet_title == "Fall-17-Attendance") %>%
+cs_points_key <- filter(sheets_table, sheet_title == "S18 Community Service Attendance Sheet") %>%
   pull(sheet_key)
 
 # Read in the tables.
@@ -72,23 +72,26 @@ event_info <- gs_read_csv(ss = gs_key(event_info_key))
 # is up to the CS committee.
 
 cs_points <- gs_read_csv(ss = gs_key(cs_points_key), skip = 1) %>%
-  select(`NetID`, `Total Points`, starts_with("Event: "))
+  select(NetID = `Net ID`, Total = `Total`, starts_with("Event: "))
 
 # Get total cs points
 
-cs_total_points <- select(cs_points, NetID, Community = `Total Points`)
+cs_total_points <- select(cs_points, NetID, Community = `Total`)
 
 # Exclude CS events which have not yet occurred.
 
 cs_event_na_count <- (!is.na(cs_points)) %>% colSums
 cs_empty_event_names <- cs_event_na_count[cs_event_na_count == 0] %>% names
-cs_events <- select(cs_points, -`Total Points`, -one_of(cs_empty_event_names))
+cs_events <- select(cs_points, -`Total`, -one_of(cs_empty_event_names))
 
 # MAKE SURE TO KEEP THIS UPDATED EVERY SEMESTER! MAKE SURE THE NETID FIELD IS LABELED "NetID"!
 
-current_candidates <- read_xlsx("BAP-Fall-Candidates.xlsx")
+current_candidates_key <- filter(sheets_table, sheet_title == "spring_2018_candidates") %>%
+  pull(sheet_key)
+current_candidates <- gs_read_csv(ss = gs_key(current_candidates_key))
 
 # Empty columns are of class "logical" by default. We change to correct type to avoid a join error later.
+# This code is only relevant during the start of the semester, when all the tables are empty
 
 member_event_cm_mat$NetID %<>% as.character
 member_event_tech_mat$NetID %<>% as.character
@@ -112,9 +115,6 @@ new_event_names <- event_names[!(event_names %in% colnames(member_event_cm_mat))
 if (is_empty(new_event_names) == TRUE){
   stop("All events have already been calculated.")
 }
-
-# GHETTO REQUEST BY ALEX TO CHANGE ALL MANDATORY EVENTS TO HAVE PENALTY 0.5 DELETE THIS CODE AT END OF SEMESTER
-event_info %<>% mutate(Penalty = replace(event_info$Penalty, event_info$Penalty != 0, 0.5))
 
 for (new_event in new_event_names){
 
@@ -147,7 +147,7 @@ exemptions_tech %<>% rbind(new_exemptions_df)}
 # Read and load new event data.
 
 drive_download(file = new_event_id, path = "new_event.xlsx", overwrite = TRUE)
-  new_event_data <- read_excel("new_event.xlsx")
+new_event_data <- read_excel("new_event.xlsx")
 
 # Add dummy "exempt" variable to tag exempted members in the melted_cm table created below.
 # If no exemptions data is available, return empty data frame.
@@ -193,11 +193,11 @@ member_event_tech_mat %<>% full_join(event_attendees, by = "NetID") %>%
 
 melted_cm <- melt(member_event_cm_mat, id = "NetID", variable.name = "Name", value.name = "Attended") %>%
   left_join(event_info, by = "Name") %>%
-  full_join(dummy_exemptions_cm, by = c("NetID", "Name")) %>%
+  left_join(dummy_exemptions_cm, by = c("NetID", "Name")) %>%
   filter(NetID != "")
 melted_tech <- melt(member_event_cm_mat, id = "NetID", variable.name = "Name", value.name = "Attended") %>%
   left_join(event_info, by = "Name") %>%
-  full_join(dummy_exemptions_tech, by = c("NetID", "Name")) %>%
+  left_join(dummy_exemptions_tech, by = c("NetID", "Name")) %>%
   filter(NetID != "")
 
 # NAs resulting from the join with the dummy exemptions table are replaced with FALSE
@@ -208,13 +208,15 @@ melted_cm$exempt[which(is.na(melted_cm$exempt))] <- FALSE
 melted_tech$exempt[which(is.na(melted_tech$exempt))] <- FALSE
 
 # Check to see which candidates received exemption status, and then subsequently attended the event
+# tbh nobody cares and the code doesnt work this semester anyway
 
-if (TRUE %in% (melted_cm$exempt & melted_cm$Attended)){
-  problem_members <- melted_cm[which(melted_cm$exempt & melted_cm$Attended),] %>%
-    select(NetID, Name)
-  problem_members %<>% left_join(current_candidates, by = "NetID")
-  paste("Member", problem_members$`First Name`, problem_members$`Last Name`, "Attended", problem_members$Name, "which they were exempted from; they have been counted as attendants, please correct CM data sheet if they did not actually attend.")
-}
+# if (TRUE %in% (melted_cm$exempt & melted_cm$Attended)){
+#   problem_members <- melted_cm[which(melted_cm$exempt & melted_cm$Attended),] %>%
+#     select(NetID, Name)
+#   problem_members %<>% left_join(current_candidates, by = "NetID")
+#   paste("Member", problem_members$`First Name`, problem_members$`Last Name`, "Attended", problem_members$Name, "which they were exempted from; they have been counted as attendants, please correct CM data sheet if they did not actually attend.")
+# }
+
 
 # Points are calculated per member, per event type (Professional, Social, Community).
 # If they attended, they are awarded points according to the point value of the event.
@@ -227,12 +229,12 @@ updated_points_cm <- group_by(melted_cm, NetID, Type) %>%
   summarise(total_points = sum(Points * Attended - Penalty * !Attended + Penalty * (exempt & !Attended))) %>%
   spread(key = "Type", value = "total_points") %>%
   left_join(cs_total_points, by = "NetID") %>%
-  left_join(current_candidates, by = "NetID")
+  inner_join(current_candidates, by = "NetID")
 updated_points_tech <- group_by(melted_tech, NetID, Type) %>%
   summarise(total_points = sum(Points * Attended - Penalty * !Attended + Penalty * (exempt & !Attended))) %>%
   spread(key = "Type", value = "total_points") %>%
   left_join(cs_total_points, by = "NetID") %>%
-  left_join(current_candidates, by = "NetID")
+  inner_join(current_candidates, by = "NetID")
 ```
 
 ```{r}
