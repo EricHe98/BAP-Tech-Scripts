@@ -26,7 +26,8 @@ drive_auth()
 gs_auth()
 
 # Get the information of all the sheets in the Drive.
-
+# this command is buggy as hell, sometimes sheets dont show up.
+# spam gs_deauth() and gs_auth() until it works and then run manually after that
 sheets_table <- gs_ls()
 
 # Pull the API key used to access the sheet for each sheet.
