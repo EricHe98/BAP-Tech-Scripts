@@ -195,7 +195,7 @@ melted_cm <- melt(member_event_cm_mat, id = "NetID", variable.name = "Name", val
   left_join(event_info, by = "Name") %>%
   left_join(dummy_exemptions_cm, by = c("NetID", "Name")) %>%
   filter(NetID != "")
-melted_tech <- melt(member_event_cm_mat, id = "NetID", variable.name = "Name", value.name = "Attended") %>%
+melted_tech <- melt(member_event_tech_mat, id = "NetID", variable.name = "Name", value.name = "Attended") %>%
   left_join(event_info, by = "Name") %>%
   left_join(dummy_exemptions_tech, by = c("NetID", "Name")) %>%
   filter(NetID != "")
