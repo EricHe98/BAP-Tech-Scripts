@@ -277,6 +277,7 @@ event_info_cm_key %>%
   drive_update(media = "event_info.csv")
 ```
 
+```{r}
 # melt community service table for JSON conversion
 melted_cs <- melt(cs_events, id = "NetID", variable.name = "Name", value.name = "Attended")
 melted_cs$Attended[melted_cs$Attended > 0] <- "Attended"
