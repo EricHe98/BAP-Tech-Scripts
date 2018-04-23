@@ -123,6 +123,10 @@ for (new_event in new_event_names){
   
 new_event_info <- filter(event_info, Name == new_event)
 
+if (is.na(new_event_info$Attendees)){
+  stop("CMs forgot to add OrgSync attendance file to their Google Forms response.")
+}
+
 new_event_id <- new_event_info %>%
   pull(Attendees) %>%
   as_id()
