@@ -176,6 +176,8 @@ netID_vec <- str_extract(new_event_data$Email, pattern = ".*?(?=@)")
 event_attendees <- data_frame(NetID = netID_vec, Name = TRUE) %>%
   set_colnames(c(colnames(.)[-ncol(.)], new_event)) # event is called "Name" bc R is retarded, so we have to replace Name column name with actual name of event with this garbage looking code. We replace the rightmost column name (i.e. "Name") with the name stored in the new_event object (e.g. "Deloitte Information Session").
 
+event_attendees %<>% unique # if candidates swipe twice, two rows are created which will double the rows during the full join in the next block of code
+
 # Join the newly created event_attendees table with the existing attendance tables. 
 # NAs created by the join operation are replaced with FALSE, 
 # since if existing members are not in the event_attendees table, they did not attend the new event
@@ -343,8 +345,8 @@ for (member_row in c(1:nrow(updated_points_cm))){
   member_points <- updated_points_cm[member_row,]
   member_events_professional <- filter(melted_cm, NetID == member_points$NetID)
   email_message <- paste("Email: ", paste0(member_points$NetID, "@stern.nyu.edu"), 
-                         "\n\nHi ", paste0(member_points$`First Name`, ","), 
-                         "\n\nThis is your weekly points update.",
+                         "\n\nHi", paste0(member_points$Name, ","), 
+                         "\n\nThis is an update on your BAP rush progress.",
                          "\n\nProfessional Points: ", member_points$Professional,
                          "\n\nSocial Points: ", member_points$Social,
                          "\n\nCommunity Points: ", member_points$Community,
