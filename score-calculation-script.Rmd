@@ -28,12 +28,18 @@ gs_auth()
 # Get the information of all the sheets in the Drive.
 # this command is buggy as hell, sometimes sheets dont show up.
 # spam gs_deauth() and gs_auth() until it works and then run manually after that
-sheets_table <- gs_ls()
+#sheets_table <- gs_ls()
+
+# TO DO: change sheets read table into drive download and read table
+sheets_table <- drive_ls()
 
 # Pull the API key used to access the sheet for each sheet.
 
-event_info_key <- filter(sheets_table, sheet_title == "events_spring_2018") %>%
-  pull(sheet_key)
+#event_info_key <- filter(sheets_table, sheet_title == "events_spring_2018") %>%
+#  pull(sheet_key)
+
+event_info_key <- filter(sheets_table, name == "event_info_cm_spring_2018") %>%
+  pull(id)
 
 event_info_cm_key <- filter(sheets_table, sheet_title == "event_info_cm_spring_2018") %>%
   pull(sheet_key)
