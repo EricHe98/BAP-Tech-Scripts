@@ -10,7 +10,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library("googlesheets") # manipulate google sheets
 library("dplyr") # munge data
 library("jsonlite") # write to JSON
 library("purrr") # functionals
@@ -21,6 +20,13 @@ library("reshape2")
 library("tidyr")
 library("googledrive")
 
+# TO CHECK:
+# Community service sheet is in correct format where the event name is in the SECOND row
+# Events start with "Event: " in community service events sheet
+# Net ID in community service events sheet is labeled "NetID"
+# Community service events sheet has column labeled "Total" corresponding to total community service points held by that candidate
+# Candidates sheet has column named "NetID"
+
 # Authorize googledrive and googlesheets to access and make edits to the Drive.
 drive_auth()
 
@@ -28,31 +34,31 @@ sheets_table <- drive_ls()
 
 # Pull the API key used to access the sheet for each sheet.
 
-event_info_key <- filter(sheets_table, name == "events_spring_2018") %>%
+event_info_key <- filter(sheets_table, name == "events_fall_2018") %>%
   pull(id)
 
 #event_info_key <- filter(sheets_table, name == "event_info_cm_spring_2018") %>%
 #  pull(id)
 
-event_info_cm_key <- filter(sheets_table, name == "event_info_cm_spring_2018") %>%
+event_info_cm_key <- filter(sheets_table, name == "event_info_cm_fall_2018") %>%
   pull(id)
 
-member_event_tech_key <- filter(sheets_table, name == "member_event_tech_spring_2018") %>%
+member_event_tech_key <- filter(sheets_table, name == "member_event_tech_fall_2018") %>%
   pull(id)
 
-member_event_cm_key <- filter(sheets_table, name == "member_event_cm_spring_2018") %>%
+member_event_cm_key <- filter(sheets_table, name == "member_event_cm_fall_2018") %>%
   pull(id) 
 
-exemptions_tech_key <- filter(sheets_table, name == "exemptions_tech_spring_2018") %>%
+exemptions_tech_key <- filter(sheets_table, name == "exemptions_tech_fall_2018") %>%
   pull(id) 
 
-exemptions_cm_key <- filter(sheets_table, name == "exemptions_cm_spring_2018") %>%
+exemptions_cm_key <- filter(sheets_table, name == "exemptions_cm_fall_2018") %>%
   pull(id)
 
-point_scores_cm_key <- filter(sheets_table, name == "point_scores_cm_spring_2018") %>%
+point_scores_cm_key <- filter(sheets_table, name == "point_scores_cm_fall_2018") %>%
   pull(id)
 
-point_scores_tech_key <- filter(sheets_table, name == "point_scores_tech_spring_2018") %>%
+point_scores_tech_key <- filter(sheets_table, name == "point_scores_tech_fall_2018") %>%
   pull(id)
 
 # This is the CS sheet, make sure the names are consistent.
@@ -91,7 +97,7 @@ current_candidates <- read_xlsx("current_candidates.xlsx")
 # is up to the CS committee.
 
 cs_points <- read_xlsx("cs_points.xlsx", skip = 1) %>%
-  select(NetID = `Net ID`, Total = `Total`, starts_with("Event: "))
+  select(NetID = `NetID`, Total = `Total`, starts_with("Event: "))
 
 # Get total cs points
 
