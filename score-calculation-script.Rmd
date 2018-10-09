@@ -23,62 +23,74 @@ library("googledrive")
 
 # Authorize googledrive and googlesheets to access and make edits to the Drive.
 drive_auth()
-gs_auth()
 
-# Get the information of all the sheets in the Drive.
-# this command is buggy as hell, sometimes sheets dont show up.
-# spam gs_deauth() and gs_auth() until it works and then run manually after that
-#sheets_table <- gs_ls()
-
-# TO DO: change sheets read table into drive download and read table
 sheets_table <- drive_ls()
 
 # Pull the API key used to access the sheet for each sheet.
 
-#event_info_key <- filter(sheets_table, sheet_title == "events_spring_2018") %>%
-#  pull(sheet_key)
-
-event_info_key <- filter(sheets_table, name == "event_info_cm_spring_2018") %>%
+event_info_key <- filter(sheets_table, name == "events_spring_2018") %>%
   pull(id)
 
-event_info_cm_key <- filter(sheets_table, sheet_title == "event_info_cm_spring_2018") %>%
-  pull(sheet_key)
+#event_info_key <- filter(sheets_table, name == "event_info_cm_spring_2018") %>%
+#  pull(id)
 
-member_event_tech_key <- filter(sheets_table, sheet_title == "member_event_tech_spring_2018") %>%
-  pull(sheet_key)
+event_info_cm_key <- filter(sheets_table, name == "event_info_cm_spring_2018") %>%
+  pull(id)
 
-member_event_cm_key <- filter(sheets_table, sheet_title == "member_event_cm_spring_2018") %>%
-  pull(sheet_key) 
+member_event_tech_key <- filter(sheets_table, name == "member_event_tech_spring_2018") %>%
+  pull(id)
 
-exemptions_tech_key <- filter(sheets_table, sheet_title == "exemptions_tech_spring_2018") %>%
-  pull(sheet_key) 
+member_event_cm_key <- filter(sheets_table, name == "member_event_cm_spring_2018") %>%
+  pull(id) 
 
-exemptions_cm_key <- filter(sheets_table, sheet_title == "exemptions_cm_spring_2018") %>%
-  pull(sheet_key)
+exemptions_tech_key <- filter(sheets_table, name == "exemptions_tech_spring_2018") %>%
+  pull(id) 
 
-point_scores_cm_key <- filter(sheets_table, sheet_title == "point_scores_cm_spring_2018") %>%
-  pull(sheet_key)
+exemptions_cm_key <- filter(sheets_table, name == "exemptions_cm_spring_2018") %>%
+  pull(id)
 
-point_scores_tech_key <- filter(sheets_table, sheet_title == "point_scores_tech_spring_2018") %>%
-  pull(sheet_key)
+point_scores_cm_key <- filter(sheets_table, name == "point_scores_cm_spring_2018") %>%
+  pull(id)
+
+point_scores_tech_key <- filter(sheets_table, name == "point_scores_tech_spring_2018") %>%
+  pull(id)
 
 # This is the CS sheet, make sure the names are consistent.
 
-cs_points_key <- filter(sheets_table, sheet_title == "S18 Community Service Attendance Sheet") %>%
-  pull(sheet_key)
+cs_points_key <- filter(sheets_table, name == "S18 Community Service Attendance Sheet") %>%
+  pull(id)
 
-# Read in the tables.
+# MAKE SURE TO KEEP THIS UPDATED EVERY SEMESTER! MAKE SURE THE NETID FIELD IS LABELED "NetID"!
 
-member_event_cm_mat <- gs_read_csv(ss = gs_key(member_event_cm_key))
-member_event_tech_mat <- gs_read_csv(ss = gs_key(member_event_tech_key))
-exemptions_tech <- gs_read_csv(ss = gs_key(exemptions_tech_key))
-exemptions_cm <- gs_read_csv(ss = gs_key(exemptions_cm_key))
-event_info <- gs_read_csv(ss = gs_key(event_info_key))
+current_candidates_key <- filter(sheets_table, name == "spring_2018_candidates") %>%
+  pull(id)
+
+# Download the files
+drive_download(as_id(event_info_key), path = "event_info", overwrite = TRUE)
+drive_download(as_id(event_info_cm_key), path = "event_info_cm", overwrite = TRUE)
+drive_download(as_id(member_event_tech_key), path = "member_event_tech", overwrite = TRUE)
+drive_download(as_id(member_event_cm_key), path = "member_event_cm", overwrite = TRUE)
+drive_download(as_id(exemptions_tech_key), path = "exemptions_tech", overwrite = TRUE)
+drive_download(as_id(exemptions_cm_key), path = "exemptions_cm", overwrite = TRUE)
+drive_download(as_id(point_scores_cm_key), path = "point_scores_cm", overwrite = TRUE)
+drive_download(as_id(point_scores_tech_key), path = "point_scores_tech", overwrite = TRUE)
+drive_download(as_id(cs_points_key), path = "cs_points", overwrite = TRUE)
+drive_download(as_id(current_candidates_key), path = "current_candidates", overwrite = TRUE)
+
+member_event_cm_mat <- read_xlsx("member_event_cm.xlsx")
+member_event_tech_mat <- read_xlsx("member_event_tech.xlsx")
+exemptions_tech <- read_xlsx("exemptions_tech.xlsx")
+exemptions_cm <- read_xlsx("exemptions_cm.xlsx")
+event_info <- read_xlsx("event_info.xlsx")
+
+# This code grabs the NetIDs of all the candidates for the semester
+
+current_candidates <- read_xlsx("current_candidates.xlsx")
 
 # This code munges the cs_points table. Can be highly unstable because the formatting
 # is up to the CS committee.
 
-cs_points <- gs_read_csv(ss = gs_key(cs_points_key), skip = 1) %>%
+cs_points <- read_xlsx("cs_points.xlsx", skip = 1) %>%
   select(NetID = `Net ID`, Total = `Total`, starts_with("Event: "))
 
 # Get total cs points
@@ -90,12 +102,6 @@ cs_total_points <- select(cs_points, NetID, Community = `Total`)
 cs_event_na_count <- (!is.na(cs_points)) %>% colSums
 cs_empty_event_names <- cs_event_na_count[cs_event_na_count == 0] %>% names
 cs_events <- select(cs_points, -`Total`, -one_of(cs_empty_event_names))
-
-# MAKE SURE TO KEEP THIS UPDATED EVERY SEMESTER! MAKE SURE THE NETID FIELD IS LABELED "NetID"!
-
-current_candidates_key <- filter(sheets_table, sheet_title == "spring_2018_candidates") %>%
-  pull(sheet_key)
-current_candidates <- gs_read_csv(ss = gs_key(current_candidates_key))
 
 # Empty columns are of class "logical" by default. We change to correct type to avoid a join error later.
 # This code is only relevant during the start of the semester, when all the tables are empty
