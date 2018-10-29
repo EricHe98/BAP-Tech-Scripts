@@ -43,6 +43,9 @@ event_info_key <- filter(sheets_table, name == "events_fall_2018") %>%
 event_info_cm_key <- filter(sheets_table, name == "event_info_cm_fall_2018") %>%
   pull(id)
 
+event_info_tech_key <- filter(sheets_table, name == "event_info_tech_fall_2018") %>%
+  pull(id)
+
 member_event_tech_key <- filter(sheets_table, name == "member_event_tech_fall_2018") %>%
   pull(id)
 
@@ -68,7 +71,7 @@ cs_points_key <- filter(sheets_table, name == "S18 Community Service Attendance 
 
 # MAKE SURE TO KEEP THIS UPDATED EVERY SEMESTER! MAKE SURE THE NETID FIELD IS LABELED "NetID"!
 
-current_candidates_key <- filter(sheets_table, name == "spring_2018_candidates") %>%
+current_candidates_key <- filter(sheets_table, name == "fall_2018_candidates") %>%
   pull(id)
 
 # Download the files
@@ -97,7 +100,7 @@ current_candidates <- read_xlsx("current_candidates.xlsx")
 # is up to the CS committee.
 
 cs_points <- read_xlsx("cs_points.xlsx", skip = 1) %>%
-  select(NetID = `NetID`, Total = `Total`, starts_with("Event: "))
+  select(NetID = `Net ID`, Total = `Total`, starts_with("Event: "))
 
 # Get total cs points
 
